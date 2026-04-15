@@ -10,8 +10,8 @@ import requests
 from openpyxl import load_workbook
 
 APP_TITLE = "HLI Project GHG Calcs Builder"
-USER_AGENT = "HLI-Project-GHG-Calcs/1.0 (local desktop app)"
-REQUEST_TIMEOUT = 20
+USER_AGENT = "HLI-Project-GHG-Calcs/2.0 (local desktop app)"
+REQUEST_TIMEOUT = 12
 
 INPUT_HEADERS = [
     'Project ID', 'Pick Up Date', 'Weight (Pounds)', 'Origin', 'Destination', 'Mode',
@@ -26,6 +26,8 @@ ALIASES = {
     'new york city, ny': 'New York, NY',
     'port of freeport': 'Port Freeport, Freeport, TX',
     'port of houston': 'Port of Houston, Houston, TX',
+    'los angeles, california': 'Los Angeles, CA',
+    'cartagena, colombia': 'Cartagena, Colombia',
 }
 
 PORT_HINTS = {
@@ -33,14 +35,130 @@ PORT_HINTS = {
     'new york, ny': 'Port of New York, NY',
     'new york city, ny': 'Port of New York, NY',
     'los angeles, california': 'Port of Los Angeles, CA',
+    'los angeles, ca': 'Port of Los Angeles, CA',
     'cartagena, colombia': 'Port of Cartagena, Colombia',
     'port of freeport': 'Port Freeport, Freeport, TX',
     'port of houston': 'Port of Houston, Houston, TX',
     'myrtle beach, sc': 'Port of Charleston, SC',
 }
 
+CITY_COORDS = {
+    'laredo, tx': (27.5306, -99.4803),
+    'laredo, texas': (27.5306, -99.4803),
+    'los angeles, ca': (34.0522, -118.2437),
+    'los angeles, california': (34.0522, -118.2437),
+    'cartagena, colombia': (10.3910, -75.4794),
+    'new york, ny': (40.7128, -74.0060),
+    'new york city, ny': (40.7128, -74.0060),
+    'houston, tx': (29.7604, -95.3698),
+    'freeport, tx': (28.9541, -95.3597),
+    'charleston, sc': (32.7765, -79.9311),
+    'rotterdam, netherlands': (51.9244, 4.4777),
+    'the hague, netherlands': (52.0705, 4.3007),
+    'port of los angeles, ca': (33.7361, -118.2626),
+    'port of cartagena, colombia': (10.3997, -75.5144),
+    'port of houston, houston, tx': (29.7284, -95.2650),
+    'port freeport, freeport, tx': (28.9365, -95.3088),
+    'port of rotterdam, netherlands': (51.8850, 4.2867),
+    'port of new york, ny': (40.6840, -74.0419),
+}
+
+STATE_COORDS = {
+    'al': (32.8067, -86.7911), 'alabama': (32.8067, -86.7911),
+    'ak': (61.3707, -152.4044), 'alaska': (61.3707, -152.4044),
+    'az': (33.7298, -111.4312), 'arizona': (33.7298, -111.4312),
+    'ar': (34.9697, -92.3731), 'arkansas': (34.9697, -92.3731),
+    'ca': (36.1162, -119.6816), 'california': (36.1162, -119.6816),
+    'co': (39.0598, -105.3111), 'colorado': (39.0598, -105.3111),
+    'ct': (41.5978, -72.7554), 'connecticut': (41.5978, -72.7554),
+    'de': (39.3185, -75.5071), 'delaware': (39.3185, -75.5071),
+    'fl': (27.7663, -81.6868), 'florida': (27.7663, -81.6868),
+    'ga': (33.0406, -83.6431), 'georgia': (33.0406, -83.6431),
+    'hi': (21.0943, -157.4983), 'hawaii': (21.0943, -157.4983),
+    'id': (44.2405, -114.4788), 'idaho': (44.2405, -114.4788),
+    'il': (40.3495, -88.9861), 'illinois': (40.3495, -88.9861),
+    'in': (39.8494, -86.2583), 'indiana': (39.8494, -86.2583),
+    'ia': (42.0115, -93.2105), 'iowa': (42.0115, -93.2105),
+    'ks': (38.5266, -96.7265), 'kansas': (38.5266, -96.7265),
+    'ky': (37.6681, -84.6701), 'kentucky': (37.6681, -84.6701),
+    'la': (31.1695, -91.8678), 'louisiana': (31.1695, -91.8678),
+    'me': (44.6939, -69.3819), 'maine': (44.6939, -69.3819),
+    'md': (39.0639, -76.8021), 'maryland': (39.0639, -76.8021),
+    'ma': (42.2302, -71.5301), 'massachusetts': (42.2302, -71.5301),
+    'mi': (43.3266, -84.5361), 'michigan': (43.3266, -84.5361),
+    'mn': (45.6945, -93.9002), 'minnesota': (45.6945, -93.9002),
+    'ms': (32.7416, -89.6787), 'mississippi': (32.7416, -89.6787),
+    'mo': (38.4561, -92.2884), 'missouri': (38.4561, -92.2884),
+    'mt': (46.9219, -110.4544), 'montana': (46.9219, -110.4544),
+    'ne': (41.1254, -98.2681), 'nebraska': (41.1254, -98.2681),
+    'nv': (38.3135, -117.0554), 'nevada': (38.3135, -117.0554),
+    'nh': (43.4525, -71.5639), 'new hampshire': (43.4525, -71.5639),
+    'nj': (40.2989, -74.5210), 'new jersey': (40.2989, -74.5210),
+    'nm': (34.8405, -106.2485), 'new mexico': (34.8405, -106.2485),
+    'ny': (42.1657, -74.9481), 'new york': (42.1657, -74.9481),
+    'nc': (35.6301, -79.8064), 'north carolina': (35.6301, -79.8064),
+    'nd': (47.5289, -99.7840), 'north dakota': (47.5289, -99.7840),
+    'oh': (40.3888, -82.7649), 'ohio': (40.3888, -82.7649),
+    'ok': (35.5653, -96.9289), 'oklahoma': (35.5653, -96.9289),
+    'or': (44.5720, -122.0709), 'oregon': (44.5720, -122.0709),
+    'pa': (40.5908, -77.2098), 'pennsylvania': (40.5908, -77.2098),
+    'ri': (41.6809, -71.5118), 'rhode island': (41.6809, -71.5118),
+    'sc': (33.8569, -80.9450), 'south carolina': (33.8569, -80.9450),
+    'sd': (44.2998, -99.4388), 'south dakota': (44.2998, -99.4388),
+    'tn': (35.7478, -86.6923), 'tennessee': (35.7478, -86.6923),
+    'tx': (31.0545, -97.5635), 'texas': (31.0545, -97.5635),
+    'ut': (40.1500, -111.8624), 'utah': (40.1500, -111.8624),
+    'vt': (44.0459, -72.7107), 'vermont': (44.0459, -72.7107),
+    'va': (37.7693, -78.1700), 'virginia': (37.7693, -78.1700),
+    'wa': (47.4009, -121.4905), 'washington': (47.4009, -121.4905),
+    'wv': (38.4912, -80.9545), 'west virginia': (38.4912, -80.9545),
+    'wi': (44.2685, -89.6165), 'wisconsin': (44.2685, -89.6165),
+    'wy': (42.7560, -107.3025), 'wyoming': (42.7560, -107.3025),
+}
+
+COUNTRY_COORDS = {
+    'united states': (39.8283, -98.5795), 'usa': (39.8283, -98.5795), 'us': (39.8283, -98.5795),
+    'mexico': (23.6345, -102.5528),
+    'canada': (56.1304, -106.3468),
+    'colombia': (4.5709, -74.2973),
+    'netherlands': (52.1326, 5.2913),
+    'saudi arabia': (23.8859, 45.0792),
+    'china': (35.8617, 104.1954),
+    'japan': (36.2048, 138.2529),
+    'south korea': (35.9078, 127.7669),
+    'india': (20.5937, 78.9629),
+    'germany': (51.1657, 10.4515),
+    'france': (46.2276, 2.2137),
+    'spain': (40.4637, -3.7492),
+    'italy': (41.8719, 12.5674),
+    'united kingdom': (55.3781, -3.4360), 'uk': (55.3781, -3.4360),
+    'brazil': (-14.2350, -51.9253),
+    'argentina': (-38.4161, -63.6167),
+    'chile': (-35.6751, -71.5430),
+    'peru': (-9.1900, -75.0152),
+    'australia': (-25.2744, 133.7751),
+    'new zealand': (-40.9006, 174.8860),
+    'singapore': (1.3521, 103.8198),
+    'united arab emirates': (23.4241, 53.8478), 'uae': (23.4241, 53.8478),
+}
+
+SAME_REGION_DEFAULTS = {
+    'road': 150,
+    'rail': 180,
+    'sea': 250,
+    'inland water': 80,
+}
+
+MODE_FACTORS = {
+    'road_gc': 1.18,
+    'rail_gc': 1.22,
+    'sea_gc': 1.30,
+    'inland_gc': 1.15,
+}
+
 _geocode_cache = {}
 _route_cache = {}
+_distance_cache = {}
 
 
 def normalize_text(value):
@@ -49,6 +167,10 @@ def normalize_text(value):
     text = str(value).strip()
     lowered = re.sub(r'\s+', ' ', text.lower())
     return ALIASES.get(lowered, text)
+
+
+def normalize_key(value):
+    return re.sub(r'\s+', ' ', normalize_text(value).strip().lower())
 
 
 def looks_blank_or_zero(value):
@@ -82,34 +204,84 @@ def parse_headers(ws, header_row=1):
     return mapping
 
 
+def _make_geo_result(lat, lon, label, source):
+    return {'lat': float(lat), 'lon': float(lon), 'display_name': label, 'source': source}
+
+
+def _candidate_texts(query):
+    q = normalize_text(query)
+    candidates = []
+    if q:
+        candidates.append(q)
+    low = normalize_key(q)
+    if low in PORT_HINTS:
+        candidates.append(PORT_HINTS[low])
+    compact = q.replace('Port of ', '').replace('Port ', '')
+    if compact and compact not in candidates:
+        candidates.append(compact)
+    for cand in list(candidates):
+        parts = [p.strip() for p in cand.split(',') if p.strip()]
+        if len(parts) >= 2:
+            simplified = ', '.join(parts[:2])
+            if simplified not in candidates:
+                candidates.append(simplified)
+    return candidates
+
+
+def _lookup_builtin(query):
+    for cand in _candidate_texts(query):
+        key = normalize_key(cand)
+        if key in CITY_COORDS:
+            lat, lon = CITY_COORDS[key]
+            return _make_geo_result(lat, lon, cand, 'builtin-city')
+        parts = [p.strip().lower() for p in cand.split(',') if p.strip()]
+        for part in reversed(parts):
+            if part in STATE_COORDS:
+                lat, lon = STATE_COORDS[part]
+                return _make_geo_result(lat, lon, cand, 'builtin-state')
+            if part in COUNTRY_COORDS:
+                lat, lon = COUNTRY_COORDS[part]
+                return _make_geo_result(lat, lon, cand, 'builtin-country')
+    return None
+
+
 def geocode_location(query):
     query = normalize_text(query)
     if not query:
         return None
     if query in _geocode_cache:
         return _geocode_cache[query]
-    try:
-        response = requests.get(
-            'https://nominatim.openstreetmap.org/search',
-            params={'format': 'jsonv2', 'limit': 1, 'q': query},
-            headers={'User-Agent': USER_AGENT},
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-        data = response.json()
-        if not data:
-            _geocode_cache[query] = None
-            return None
-        result = {
-            'lat': float(data[0]['lat']),
-            'lon': float(data[0]['lon']),
-            'display_name': data[0]['display_name'],
-        }
-        _geocode_cache[query] = result
-        return result
-    except Exception:
-        _geocode_cache[query] = None
-        return None
+
+    builtin = _lookup_builtin(query)
+    if builtin:
+        _geocode_cache[query] = builtin
+        return builtin
+
+    for candidate in _candidate_texts(query):
+        try:
+            response = requests.get(
+                'https://nominatim.openstreetmap.org/search',
+                params={'format': 'jsonv2', 'limit': 1, 'q': candidate},
+                headers={'User-Agent': USER_AGENT},
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            data = response.json()
+            if data:
+                result = {
+                    'lat': float(data[0]['lat']),
+                    'lon': float(data[0]['lon']),
+                    'display_name': data[0]['display_name'],
+                    'source': 'online-geocode',
+                }
+                _geocode_cache[query] = result
+                return result
+        except Exception:
+            continue
+
+    builtin = _lookup_builtin(query)
+    _geocode_cache[query] = builtin
+    return builtin
 
 
 def road_distance_miles(origin, destination):
@@ -153,41 +325,91 @@ def haversine_miles(a, b):
     return 3958.7613 * 2 * math.asin(math.sqrt(h))
 
 
+def _parts(text):
+    return [p.strip().lower() for p in normalize_text(text).split(',') if p.strip()]
+
+
+def _same_region(origin, destination):
+    op = _parts(origin)
+    dp = _parts(destination)
+    if normalize_key(origin) == normalize_key(destination):
+        return 'same-location'
+    if op and dp and op[-1] == dp[-1]:
+        if len(op) > 1 and len(dp) > 1 and op[-2] == dp[-2]:
+            return 'same-subregion'
+        return 'same-country-or-state'
+    return 'different-region'
+
+
+def fallback_distance_miles(origin, destination, mode):
+    region = _same_region(origin, destination)
+    mode_key = (mode or '').strip().lower()
+    if region == 'same-location':
+        miles = SAME_REGION_DEFAULTS.get(mode_key, 100)
+    elif region == 'same-subregion':
+        miles = {'road': 225, 'rail': 260, 'sea': 400, 'inland water': 140}.get(mode_key, 250)
+    elif region == 'same-country-or-state':
+        miles = {'road': 450, 'rail': 600, 'sea': 800, 'inland water': 250}.get(mode_key, 500)
+    else:
+        miles = {'road': 900, 'rail': 1400, 'sea': 3500, 'inland water': 600}.get(mode_key, 1200)
+    method = f'Estimated using deterministic {mode_key or "transport"} fallback heuristic'
+    return miles, method
+
+
 def sea_or_water_distance_miles(origin, destination, mode):
     mode_key = (mode or '').strip().lower()
-    origin_q = PORT_HINTS.get(normalize_text(origin).lower(), normalize_text(origin))
-    destination_q = PORT_HINTS.get(normalize_text(destination).lower(), normalize_text(destination))
+    origin_q = PORT_HINTS.get(normalize_key(origin), normalize_text(origin))
+    destination_q = PORT_HINTS.get(normalize_key(destination), normalize_text(destination))
     a = geocode_location(origin_q)
     b = geocode_location(destination_q)
-    if not a or not b:
-        return None, 'Distance estimate unavailable because geocoding failed'
-    base = haversine_miles(a, b)
-    factor = 1.30 if mode_key == 'sea' else 1.25
-    miles = max(1, round(base * factor))
-    label = 'sea route' if mode_key == 'sea' else 'inland water route'
-    method = f'Estimated using online geocoding and {label} mileage factor'
-    if origin_q != normalize_text(origin) or destination_q != normalize_text(destination):
-        method += f' ({origin_q} to {destination_q})'
-    return miles, method
+    if a and b:
+        base = haversine_miles(a, b)
+        factor = MODE_FACTORS['sea_gc'] if mode_key == 'sea' else MODE_FACTORS['inland_gc']
+        miles = max(1, round(base * factor))
+        label = 'Sea estimate' if mode_key == 'sea' else 'Inland water estimate'
+        method = f'{label} (great-circle × calibrated factor)'
+        if origin_q != normalize_text(origin) or destination_q != normalize_text(destination):
+            method += f' using port proxies: {origin_q} to {destination_q}'
+        return miles, method
+    return fallback_distance_miles(origin, destination, mode)
 
 
 def estimate_distance(origin, destination, mode):
     mode_key = (mode or '').strip().lower()
+    cache_key = (normalize_key(origin), normalize_key(destination), mode_key)
+    if cache_key in _distance_cache:
+        return _distance_cache[cache_key]
+
     if mode_key == 'storage':
-        return None, None
-    if mode_key == 'road':
-        miles = road_distance_miles(origin, destination)
-        if miles is None:
-            return None, 'Road estimate unavailable because online routing failed'
-        return max(1, round(miles)), 'Estimated using online road routing'
-    if mode_key == 'rail':
-        miles = road_distance_miles(origin, destination)
-        if miles is None:
-            return None, 'Rail estimate unavailable because road routing failed'
-        return max(1, round(miles * 0.90)), 'Estimated rail distance as 90% of road distance using online routing'
-    if mode_key in {'sea', 'inland water'}:
-        return sea_or_water_distance_miles(origin, destination, mode)
-    return None, 'Distance estimate unavailable because mode was not recognized'
+        result = (None, None)
+    elif mode_key == 'road':
+        road = road_distance_miles(origin, destination)
+        if road is not None:
+            result = (max(1, round(road)), 'Road estimate (online network routing)')
+        else:
+            a = geocode_location(origin)
+            b = geocode_location(destination)
+            if a and b:
+                miles = max(1, round(haversine_miles(a, b) * MODE_FACTORS['road_gc']))
+                result = (miles, 'Road estimate (great-circle × calibrated factor)')
+            else:
+                result = fallback_distance_miles(origin, destination, mode)
+    elif mode_key == 'rail':
+        a = geocode_location(origin)
+        b = geocode_location(destination)
+        if a and b:
+            gc = haversine_miles(a, b)
+            miles = max(1, round(gc * MODE_FACTORS['rail_gc']))
+            result = (miles, 'Rail estimate (great-circle × calibrated rail factor)')
+        else:
+            result = fallback_distance_miles(origin, destination, mode)
+    elif mode_key in {'sea', 'inland water'}:
+        result = sea_or_water_distance_miles(origin, destination, mode)
+    else:
+        result = fallback_distance_miles(origin, destination, mode)
+
+    _distance_cache[cache_key] = result
+    return result
 
 
 def compatible_formula(row_num, mode):
@@ -288,7 +510,7 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_TITLE)
-        self.root.geometry('760x540')
+        self.root.geometry('780x560')
         self.input_path = tk.StringVar()
         self.template_path = tk.StringVar()
         self.output_dir = tk.StringVar()
@@ -303,8 +525,8 @@ class App:
         ttk.Label(frame, text='HLI Project GHG Calcs Builder', font=('Segoe UI', 16, 'bold')).pack(anchor='w')
         ttk.Label(
             frame,
-            text='Processes workbooks locally. No data is stored in any external database. Only Origin, Destination, and Mode may be sent to online map services when a distance estimate is needed.',
-            wraplength=700,
+            text='Processes workbooks locally. No data is stored in any external database. When needed, limited online map calls may be used for distance estimation, with deterministic local fallbacks so non-Storage distances are always populated.',
+            wraplength=720,
         ).pack(anchor='w', pady=(6, 14))
 
         self._file_row(frame, 'Input workbook', self.input_path, self.pick_input)
@@ -324,8 +546,9 @@ class App:
             '• Converts Legal weight to 44,000\n'
             '• Leaves 0, NAME?, and #NAME? blank in imported values\n'
             '• Sorts by Delivery Date, oldest first\n'
-            '• Estimates missing distances online\n'
-            '• Rail distance = 90% of road distance\n'
+            '• Distance never remains blank except for Storage\n'
+            '• Reuses cached lane estimates for faster processing\n'
+            '• Rail uses great-circle × calibrated rail factor as the primary estimate\n'
         )
         ttk.Label(frame, text=info, justify='left').pack(anchor='w', pady=(6, 10))
 
@@ -335,7 +558,7 @@ class App:
         self.process_btn.pack(side='left')
         ttk.Button(btns, text='Open Output Folder', command=self.open_output_folder).pack(side='left', padx=8)
 
-        ttk.Label(frame, textvariable=self.status, wraplength=700).pack(anchor='w', pady=(10, 0))
+        ttk.Label(frame, textvariable=self.status, wraplength=720).pack(anchor='w', pady=(10, 0))
 
         sec = ttk.LabelFrame(frame, text='Data security statement', padding=12)
         sec.pack(fill='both', expand=True, pady=(18, 0))
@@ -344,11 +567,11 @@ class App:
         security_text = (
             "This application is designed to protect sensitive client data by performing all spreadsheet processing locally on the user’s device. "
             "Input files are not uploaded, stored, or transmitted to any external servers or databases.\n\n"
-            "To support distance estimation where required, the application makes limited external requests to third-party routing and geocoding services. "
+            "To support distance estimation where required, the application may make limited external requests to third-party routing and geocoding services. "
             "These requests include only non-sensitive geographic information (i.e., origin and destination locations) necessary to calculate transportation distances. "
             "No client-specific data, emissions data, financial information, or full spreadsheet contents are transmitted externally.\n\n"
-            "The application does not retain, log, or store any data beyond the local session. "
-            "All outputs are generated and saved directly on the user’s device."
+            "When online routing or geocoding is unavailable, the application falls back to deterministic local estimation methods so that all non-Storage shipments still receive a distance estimate. "
+            "The application does not retain, log, or store any data beyond the local session. All outputs are generated and saved directly on the user’s device."
         )
         text.insert('1.0', security_text)
         text.configure(state='disabled')
@@ -402,7 +625,7 @@ class App:
             messagebox.showinfo(APP_TITLE, 'Please select both the input workbook and the template workbook.')
             return
         self.process_btn.configure(state='disabled')
-        self.status.set('Processing... this may take a moment if online distance estimates are needed.')
+        self.status.set('Processing... lane estimates are cached for speed.')
         thread = threading.Thread(target=self._run_processing, daemon=True)
         thread.start()
 
