@@ -9,9 +9,14 @@ from tkinter import filedialog, messagebox, ttk
 import requests
 from openpyxl import load_workbook
 
+try:
+    import searoute as sr
+except Exception:
+    sr = None
+
 APP_TITLE = "HLI Project GHG Calcs Builder"
-USER_AGENT = "HLI-Project-GHG-Calcs/2.0 (local desktop app)"
-REQUEST_TIMEOUT = 12
+USER_AGENT = "HLI-Project-GHG-Calcs/3.0 (local desktop app)"
+REQUEST_TIMEOUT = 14
 
 INPUT_HEADERS = [
     'Project ID', 'Pick Up Date', 'Weight (Pounds)', 'Origin', 'Destination', 'Mode',
@@ -28,10 +33,20 @@ ALIASES = {
     'port of houston': 'Port of Houston, Houston, TX',
     'los angeles, california': 'Los Angeles, CA',
     'cartagena, colombia': 'Cartagena, Colombia',
+    'oakland, ca': 'Oakland, CA',
+    'oakland, california': 'Oakland, CA',
+    'cancun, mexico': 'Cancun, Quintana Roo, Mexico',
+    'boston, ma': 'Boston, MA',
+    'ithica, ny': 'Ithaca, NY',
+    'ithaca, ny': 'Ithaca, NY',
+    'myrtle beach, sc': 'Myrtle Beach, SC',
+    'miami, florida': 'Miami, FL',
+    'rotterdam, netherlands': 'Rotterdam, Netherlands',
 }
 
 PORT_HINTS = {
     'the hague, netherlands': 'Port of Rotterdam, Netherlands',
+    'rotterdam, netherlands': 'Port of Rotterdam, Netherlands',
     'new york, ny': 'Port of New York, NY',
     'new york city, ny': 'Port of New York, NY',
     'los angeles, california': 'Port of Los Angeles, CA',
@@ -40,6 +55,8 @@ PORT_HINTS = {
     'port of freeport': 'Port Freeport, Freeport, TX',
     'port of houston': 'Port of Houston, Houston, TX',
     'myrtle beach, sc': 'Port of Charleston, SC',
+    'miami, fl': 'PortMiami, Miami, FL',
+    'miami, florida': 'PortMiami, Miami, FL',
 }
 
 CITY_COORDS = {
@@ -55,12 +72,25 @@ CITY_COORDS = {
     'charleston, sc': (32.7765, -79.9311),
     'rotterdam, netherlands': (51.9244, 4.4777),
     'the hague, netherlands': (52.0705, 4.3007),
+    'oakland, ca': (37.8044, -122.2711),
+    'oakland, california': (37.8044, -122.2711),
+    'cancun, quintana roo, mexico': (21.1619, -86.8515),
+    'cancun, mexico': (21.1619, -86.8515),
+    'boston, ma': (42.3601, -71.0589),
+    'boston, massachusetts': (42.3601, -71.0589),
+    'ithaca, ny': (42.4430, -76.5019),
+    'ithica, ny': (42.4430, -76.5019),
+    'myrtle beach, sc': (33.6891, -78.8867),
+    'miami, fl': (25.7617, -80.1918),
+    'miami, florida': (25.7617, -80.1918),
     'port of los angeles, ca': (33.7361, -118.2626),
     'port of cartagena, colombia': (10.3997, -75.5144),
     'port of houston, houston, tx': (29.7284, -95.2650),
     'port freeport, freeport, tx': (28.9365, -95.3088),
     'port of rotterdam, netherlands': (51.8850, 4.2867),
     'port of new york, ny': (40.6840, -74.0419),
+    'portmiami, miami, fl': (25.7781, -80.1794),
+    'port of charleston, sc': (32.7812, -79.9361),
 }
 
 STATE_COORDS = {
@@ -82,38 +112,23 @@ STATE_COORDS = {
     'ks': (38.5266, -96.7265), 'kansas': (38.5266, -96.7265),
     'ky': (37.6681, -84.6701), 'kentucky': (37.6681, -84.6701),
     'la': (31.1695, -91.8678), 'louisiana': (31.1695, -91.8678),
-    'me': (44.6939, -69.3819), 'maine': (44.6939, -69.3819),
-    'md': (39.0639, -76.8021), 'maryland': (39.0639, -76.8021),
     'ma': (42.2302, -71.5301), 'massachusetts': (42.2302, -71.5301),
+    'md': (39.0639, -76.8021), 'maryland': (39.0639, -76.8021),
+    'me': (44.6939, -69.3819), 'maine': (44.6939, -69.3819),
     'mi': (43.3266, -84.5361), 'michigan': (43.3266, -84.5361),
     'mn': (45.6945, -93.9002), 'minnesota': (45.6945, -93.9002),
     'ms': (32.7416, -89.6787), 'mississippi': (32.7416, -89.6787),
     'mo': (38.4561, -92.2884), 'missouri': (38.4561, -92.2884),
-    'mt': (46.9219, -110.4544), 'montana': (46.9219, -110.4544),
-    'ne': (41.1254, -98.2681), 'nebraska': (41.1254, -98.2681),
-    'nv': (38.3135, -117.0554), 'nevada': (38.3135, -117.0554),
-    'nh': (43.4525, -71.5639), 'new hampshire': (43.4525, -71.5639),
-    'nj': (40.2989, -74.5210), 'new jersey': (40.2989, -74.5210),
-    'nm': (34.8405, -106.2485), 'new mexico': (34.8405, -106.2485),
-    'ny': (42.1657, -74.9481), 'new york': (42.1657, -74.9481),
     'nc': (35.6301, -79.8064), 'north carolina': (35.6301, -79.8064),
-    'nd': (47.5289, -99.7840), 'north dakota': (47.5289, -99.7840),
+    'nj': (40.2989, -74.5210), 'new jersey': (40.2989, -74.5210),
+    'ny': (42.1657, -74.9481), 'new york': (42.1657, -74.9481),
     'oh': (40.3888, -82.7649), 'ohio': (40.3888, -82.7649),
-    'ok': (35.5653, -96.9289), 'oklahoma': (35.5653, -96.9289),
-    'or': (44.5720, -122.0709), 'oregon': (44.5720, -122.0709),
     'pa': (40.5908, -77.2098), 'pennsylvania': (40.5908, -77.2098),
     'ri': (41.6809, -71.5118), 'rhode island': (41.6809, -71.5118),
     'sc': (33.8569, -80.9450), 'south carolina': (33.8569, -80.9450),
-    'sd': (44.2998, -99.4388), 'south dakota': (44.2998, -99.4388),
     'tn': (35.7478, -86.6923), 'tennessee': (35.7478, -86.6923),
     'tx': (31.0545, -97.5635), 'texas': (31.0545, -97.5635),
-    'ut': (40.1500, -111.8624), 'utah': (40.1500, -111.8624),
-    'vt': (44.0459, -72.7107), 'vermont': (44.0459, -72.7107),
     'va': (37.7693, -78.1700), 'virginia': (37.7693, -78.1700),
-    'wa': (47.4009, -121.4905), 'washington': (47.4009, -121.4905),
-    'wv': (38.4912, -80.9545), 'west virginia': (38.4912, -80.9545),
-    'wi': (44.2685, -89.6165), 'wisconsin': (44.2685, -89.6165),
-    'wy': (42.7560, -107.3025), 'wyoming': (42.7560, -107.3025),
 }
 
 COUNTRY_COORDS = {
@@ -122,43 +137,93 @@ COUNTRY_COORDS = {
     'canada': (56.1304, -106.3468),
     'colombia': (4.5709, -74.2973),
     'netherlands': (52.1326, 5.2913),
-    'saudi arabia': (23.8859, 45.0792),
-    'china': (35.8617, 104.1954),
-    'japan': (36.2048, 138.2529),
-    'south korea': (35.9078, 127.7669),
-    'india': (20.5937, 78.9629),
-    'germany': (51.1657, 10.4515),
-    'france': (46.2276, 2.2137),
-    'spain': (40.4637, -3.7492),
-    'italy': (41.8719, 12.5674),
-    'united kingdom': (55.3781, -3.4360), 'uk': (55.3781, -3.4360),
-    'brazil': (-14.2350, -51.9253),
-    'argentina': (-38.4161, -63.6167),
-    'chile': (-35.6751, -71.5430),
-    'peru': (-9.1900, -75.0152),
-    'australia': (-25.2744, 133.7751),
-    'new zealand': (-40.9006, 174.8860),
-    'singapore': (1.3521, 103.8198),
-    'united arab emirates': (23.4241, 53.8478), 'uae': (23.4241, 53.8478),
 }
 
-SAME_REGION_DEFAULTS = {
-    'road': 150,
-    'rail': 180,
-    'sea': 250,
-    'inland water': 80,
+ROAD_FACTOR = 1.33
+RAIL_FACTOR = 1.42
+INLAND_FACTOR = 1.28
+SEA_FACTOR = 1.08
+
+METERS_PER_MILE = 1609.344
+KM_PER_MILE = 1.609344
+
+ATLANTIC_ICW_MILES = {
+    'norfolk, va': 0,
+    'wilmington, nc': 295,
+    'myrtle beach, sc': 350,
+    'charleston, sc': 455,
+    'savannah, ga': 565,
+    'jacksonville, fl': 760,
+    'west palm beach, fl': 1010,
+    'miami, fl': 1090,
 }
 
-MODE_FACTORS = {
-    'road_gc': 1.18,
-    'rail_gc': 1.22,
-    'sea_gc': 1.30,
-    'inland_gc': 1.15,
+RAIL_HUBS = {
+    'boston, ma': (42.3601, -71.0589),
+    'albany, ny': (42.6526, -73.7562),
+    'selkirk, ny': (42.5656, -73.7985),
+    'syracuse, ny': (43.0481, -76.1474),
+    'binghamton, ny': (42.0987, -75.9180),
+    'ithaca, ny': (42.4430, -76.5019),
+    'chicago, il': (41.8781, -87.6298),
+    'kansas city, mo': (39.0997, -94.5786),
+    'memphis, tn': (35.1495, -90.0490),
+    'new orleans, la': (29.9511, -90.0715),
+    'dallas, tx': (32.7767, -96.7970),
+    'el paso, tx': (31.7619, -106.4850),
+    'los angeles, ca': (34.0522, -118.2437),
+    'oakland, ca': (37.8044, -122.2711),
+    'miami, fl': (25.7617, -80.1918),
+    'atlanta, ga': (33.7490, -84.3880),
+    'jacksonville, fl': (30.3322, -81.6557),
+}
+RAIL_CORRIDOR_EDGES = {
+    ('boston, ma', 'albany, ny'): 205,
+    ('albany, ny', 'selkirk, ny'): 15,
+    ('selkirk, ny', 'syracuse, ny'): 145,
+    ('selkirk, ny', 'binghamton, ny'): 135,
+    ('binghamton, ny', 'ithaca, ny'): 75,
+    ('syracuse, ny', 'ithaca, ny'): 70,
+    ('jacksonville, fl', 'miami, fl'): 365,
+    ('atlanta, ga', 'jacksonville, fl'): 350,
+    ('new orleans, la', 'dallas, tx'): 530,
+    ('dallas, tx', 'el paso, tx'): 635,
+    ('el paso, tx', 'los angeles, ca'): 800,
+    ('los angeles, ca', 'oakland, ca'): 405,
+    ('memphis, tn', 'atlanta, ga'): 385,
+    ('chicago, il', 'memphis, tn'): 530,
+    ('chicago, il', 'kansas city, mo'): 510,
+    ('kansas city, mo', 'dallas, tx'): 520,
 }
 
 _geocode_cache = {}
 _route_cache = {}
 _distance_cache = {}
+
+
+def miles_from_meters(value):
+    return float(value) / METERS_PER_MILE
+
+
+def miles_from_km(value):
+    return float(value) / KM_PER_MILE
+
+
+def round_miles(value):
+    if value is None:
+        return None
+    return max(1, round(float(value)))
+
+
+def ensure_final_miles(value):
+    """Final guard before writing to Excel.
+
+    All estimator functions are expected to return miles already. This helper
+    simply normalizes type/rounding so the workbook always receives numeric miles.
+    """
+    if value is None:
+        return None
+    return round_miles(value)
 
 
 def normalize_text(value):
@@ -284,10 +349,19 @@ def geocode_location(query):
     return builtin
 
 
+def haversine_miles(a, b):
+    lat1, lon1 = math.radians(a['lat']), math.radians(a['lon'])
+    lat2, lon2 = math.radians(b['lat']), math.radians(b['lon'])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 3958.7613 * 2 * math.asin(math.sqrt(h))
+
+
 def road_distance_miles(origin, destination):
     origin = normalize_text(origin)
     destination = normalize_text(destination)
-    key = (origin, destination)
+    key = ('road', origin, destination)
     if key in _route_cache:
         return _route_cache[key]
     a = geocode_location(origin)
@@ -308,7 +382,9 @@ def road_distance_miles(origin, destination):
         if not routes:
             _route_cache[key] = None
             return None
-        miles = routes[0]['distance'] / 1609.344
+        miles = miles_from_meters(routes[0]['distance'])
+        gc = haversine_miles(a, b)
+        miles = max(miles, gc * 1.12, gc * ROAD_FACTOR if gc > 1000 else miles)
         _route_cache[key] = miles
         return miles
     except Exception:
@@ -316,62 +392,161 @@ def road_distance_miles(origin, destination):
         return None
 
 
-def haversine_miles(a, b):
-    lat1, lon1 = math.radians(a['lat']), math.radians(a['lon'])
-    lat2, lon2 = math.radians(b['lat']), math.radians(b['lon'])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    return 3958.7613 * 2 * math.asin(math.sqrt(h))
+def _nearest_icw_point(label):
+    key = normalize_key(label)
+    if key in ATLANTIC_ICW_MILES:
+        return key
+    geo = geocode_location(label)
+    if not geo:
+        return None
+    best = None
+    best_dist = float('inf')
+    for name in ATLANTIC_ICW_MILES:
+        lat, lon = CITY_COORDS.get(name, (None, None))
+        if lat is None:
+            continue
+        d = haversine_miles(geo, {'lat': lat, 'lon': lon})
+        if d < best_dist:
+            best = name
+            best_dist = d
+    return best if best_dist <= 120 else None
 
 
-def _parts(text):
-    return [p.strip().lower() for p in normalize_text(text).split(',') if p.strip()]
+def inland_water_distance_miles(origin, destination):
+    key = ('inland', normalize_text(origin), normalize_text(destination))
+    if key in _route_cache:
+        return _route_cache[key]
+    o_icw = _nearest_icw_point(origin)
+    d_icw = _nearest_icw_point(destination)
+    if o_icw and d_icw:
+        miles = abs(ATLANTIC_ICW_MILES[d_icw] - ATLANTIC_ICW_MILES[o_icw])
+        if miles > 0:
+            _route_cache[key] = (miles, f'Atlantic ICW corridor estimate ({o_icw.title()} ↔ {d_icw.title()})')
+            return _route_cache[key]
+    a = geocode_location(origin)
+    b = geocode_location(destination)
+    if a and b:
+        gc = haversine_miles(a, b)
+        miles = round_miles(gc * INLAND_FACTOR)
+        result = (miles, 'Inland water estimate (great-circle × calibrated corridor factor)')
+        _route_cache[key] = result
+        return result
+    return None
 
 
-def _same_region(origin, destination):
-    op = _parts(origin)
-    dp = _parts(destination)
-    if normalize_key(origin) == normalize_key(destination):
-        return 'same-location'
-    if op and dp and op[-1] == dp[-1]:
-        if len(op) > 1 and len(dp) > 1 and op[-2] == dp[-2]:
-            return 'same-subregion'
-        return 'same-country-or-state'
-    return 'different-region'
+def sea_distance_miles(origin, destination):
+    key = ('sea', normalize_text(origin), normalize_text(destination))
+    if key in _route_cache:
+        return _route_cache[key]
 
-
-def fallback_distance_miles(origin, destination, mode):
-    region = _same_region(origin, destination)
-    mode_key = (mode or '').strip().lower()
-    if region == 'same-location':
-        miles = SAME_REGION_DEFAULTS.get(mode_key, 100)
-    elif region == 'same-subregion':
-        miles = {'road': 225, 'rail': 260, 'sea': 400, 'inland water': 140}.get(mode_key, 250)
-    elif region == 'same-country-or-state':
-        miles = {'road': 450, 'rail': 600, 'sea': 800, 'inland water': 250}.get(mode_key, 500)
-    else:
-        miles = {'road': 900, 'rail': 1400, 'sea': 3500, 'inland water': 600}.get(mode_key, 1200)
-    method = f'Estimated using deterministic {mode_key or "transport"} fallback heuristic'
-    return miles, method
-
-
-def sea_or_water_distance_miles(origin, destination, mode):
-    mode_key = (mode or '').strip().lower()
     origin_q = PORT_HINTS.get(normalize_key(origin), normalize_text(origin))
     destination_q = PORT_HINTS.get(normalize_key(destination), normalize_text(destination))
     a = geocode_location(origin_q)
     b = geocode_location(destination_q)
+    if not a or not b:
+        return None
+
+    if sr is not None:
+        try:
+            route = sr.searoute([a['lon'], a['lat']], [b['lon'], b['lat']], units='km', include_ports=True)
+            length_km = route.properties.get('length')
+            if length_km:
+                miles = round_miles(miles_from_km(length_km))
+                method = 'Sea estimate (maritime network route)'
+                _route_cache[key] = (miles, method)
+                return _route_cache[key]
+        except Exception:
+            pass
+
+    gc = haversine_miles(a, b)
+    miles = round_miles(gc * SEA_FACTOR)
+    result = (miles, 'Sea estimate (great-circle × calibrated sea factor)')
+    _route_cache[key] = result
+    return result
+
+
+def _nearest_rail_hub(label):
+    geo = geocode_location(label)
+    if not geo:
+        return None
+    best = None
+    best_dist = float('inf')
+    for name, (lat, lon) in RAIL_HUBS.items():
+        d = haversine_miles(geo, {'lat': lat, 'lon': lon})
+        if d < best_dist:
+            best = name
+            best_dist = d
+    return (best, best_dist) if best is not None else None
+
+
+def _rail_graph_distance(start, end):
+    # simple Dijkstra on corridor edges
+    graph = {}
+    for (u, v), w in RAIL_CORRIDOR_EDGES.items():
+        graph.setdefault(u, []).append((v, w))
+        graph.setdefault(v, []).append((u, w))
+    import heapq
+    pq = [(0, start)]
+    seen = set()
+    while pq:
+        dist, node = heapq.heappop(pq)
+        if node == end:
+            return dist
+        if node in seen:
+            continue
+        seen.add(node)
+        for nxt, w in graph.get(node, []):
+            if nxt not in seen:
+                heapq.heappush(pq, (dist + w, nxt))
+    return None
+
+
+def rail_distance_miles(origin, destination):
+    key = ('rail', normalize_text(origin), normalize_text(destination))
+    if key in _route_cache:
+        return _route_cache[key]
+    a = geocode_location(origin)
+    b = geocode_location(destination)
+    if not a or not b:
+        return None
+    gc = haversine_miles(a, b)
+    o_hub = _nearest_rail_hub(origin)
+    d_hub = _nearest_rail_hub(destination)
+    if o_hub and d_hub:
+        (o_name, o_last), (d_name, d_last) = o_hub, d_hub
+        corridor = _rail_graph_distance(o_name, d_name)
+        if corridor is not None:
+            miles = round_miles(corridor + o_last * 1.15 + d_last * 1.15)
+            miles = max(miles, round(gc * 1.18))
+            result = (miles, f'Rail estimate (network corridor via {o_name.title()} → {d_name.title()})')
+            _route_cache[key] = result
+            return result
+    road = road_distance_miles(origin, destination)
+    if road is not None:
+        miles = max(round_miles(road * 1.12), round_miles(gc * RAIL_FACTOR))
+        result = (miles, 'Rail estimate (road network proxy × rail factor)')
+        _route_cache[key] = result
+        return result
+    miles = round_miles(gc * RAIL_FACTOR)
+    result = (miles, 'Rail estimate (great-circle × calibrated rail factor)')
+    _route_cache[key] = result
+    return result
+
+
+def fallback_distance_miles(origin, destination, mode):
+    a = geocode_location(origin)
+    b = geocode_location(destination)
     if a and b:
-        base = haversine_miles(a, b)
-        factor = MODE_FACTORS['sea_gc'] if mode_key == 'sea' else MODE_FACTORS['inland_gc']
-        miles = max(1, round(base * factor))
-        label = 'Sea estimate' if mode_key == 'sea' else 'Inland water estimate'
-        method = f'{label} (great-circle × calibrated factor)'
-        if origin_q != normalize_text(origin) or destination_q != normalize_text(destination):
-            method += f' using port proxies: {origin_q} to {destination_q}'
+        gc = haversine_miles(a, b)
+        mode_key = (mode or '').strip().lower()
+        factor = {'road': ROAD_FACTOR, 'rail': RAIL_FACTOR, 'sea': SEA_FACTOR, 'inland water': INLAND_FACTOR}.get(mode_key, 1.25)
+        miles = max(1, round(gc * factor))
+        method = f'Estimated using great-circle × calibrated {mode_key or "transport"} factor'
         return miles, method
-    return fallback_distance_miles(origin, destination, mode)
+    mode_key = (mode or '').strip().lower()
+    miles = {'road': 900, 'rail': 1400, 'sea': 3500, 'inland water': 600}.get(mode_key, 1200)
+    method = f'Estimated using deterministic {mode_key or "transport"} fallback heuristic'
+    return miles, method
 
 
 def estimate_distance(origin, destination, mode):
@@ -385,26 +560,18 @@ def estimate_distance(origin, destination, mode):
     elif mode_key == 'road':
         road = road_distance_miles(origin, destination)
         if road is not None:
-            result = (max(1, round(road)), 'Road estimate (online network routing)')
-        else:
-            a = geocode_location(origin)
-            b = geocode_location(destination)
-            if a and b:
-                miles = max(1, round(haversine_miles(a, b) * MODE_FACTORS['road_gc']))
-                result = (miles, 'Road estimate (great-circle × calibrated factor)')
-            else:
-                result = fallback_distance_miles(origin, destination, mode)
-    elif mode_key == 'rail':
-        a = geocode_location(origin)
-        b = geocode_location(destination)
-        if a and b:
-            gc = haversine_miles(a, b)
-            miles = max(1, round(gc * MODE_FACTORS['rail_gc']))
-            result = (miles, 'Rail estimate (great-circle × calibrated rail factor)')
+            result = (max(1, round(road)), 'Road estimate (online road network routing)')
         else:
             result = fallback_distance_miles(origin, destination, mode)
-    elif mode_key in {'sea', 'inland water'}:
-        result = sea_or_water_distance_miles(origin, destination, mode)
+    elif mode_key == 'rail':
+        rail = rail_distance_miles(origin, destination)
+        result = rail if rail is not None else fallback_distance_miles(origin, destination, mode)
+    elif mode_key == 'sea':
+        sea = sea_distance_miles(origin, destination)
+        result = sea if sea is not None else fallback_distance_miles(origin, destination, mode)
+    elif mode_key == 'inland water':
+        inland = inland_water_distance_miles(origin, destination)
+        result = inland if inland is not None else fallback_distance_miles(origin, destination, mode)
     else:
         result = fallback_distance_miles(origin, destination, mode)
 
@@ -458,9 +625,10 @@ def process_workbooks(input_path, template_path, output_path=None, repair_formul
                 row[key] = clean_output_value(row[key])
         if looks_blank_or_zero(row['Distance (Miles)']):
             estimate, method = estimate_distance(row['Origin'], row['Destination'], row['Mode'])
-            row['Distance (Miles)'] = estimate
+            row['Distance (Miles)'] = ensure_final_miles(estimate)
             row['Distance Estimation Method'] = method
         else:
+            row['Distance (Miles)'] = ensure_final_miles(row['Distance (Miles)']) if row['Mode'] != 'Storage' else clean_output_value(row['Distance (Miles)'])
             row['Distance Estimation Method'] = None
         rows.append(row)
 
@@ -510,7 +678,7 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title(APP_TITLE)
-        self.root.geometry('780x560')
+        self.root.geometry('780x580')
         self.input_path = tk.StringVar()
         self.template_path = tk.StringVar()
         self.output_dir = tk.StringVar()
@@ -525,7 +693,7 @@ class App:
         ttk.Label(frame, text='HLI Project GHG Calcs Builder', font=('Segoe UI', 16, 'bold')).pack(anchor='w')
         ttk.Label(
             frame,
-            text='Processes workbooks locally. No data is stored in any external database. When needed, limited online map calls may be used for distance estimation, with deterministic local fallbacks so non-Storage distances are always populated.',
+            text='Processes workbooks locally. No data is stored in any external database. This version uses online routing where available for road, maritime network logic for sea when the package is available, corridor logic for Atlantic ICW inland-water lanes, and stronger rail network-proxy logic.',
             wraplength=720,
         ).pack(anchor='w', pady=(6, 14))
 
@@ -548,7 +716,10 @@ class App:
             '• Sorts by Delivery Date, oldest first\n'
             '• Distance never remains blank except for Storage\n'
             '• Reuses cached lane estimates for faster processing\n'
-            '• Rail uses great-circle × calibrated rail factor as the primary estimate\n'
+            '• Road uses online road routing when available\n'
+            '• Sea uses maritime network routing when available\n'
+            '• Inland water prefers Atlantic ICW corridor logic when applicable\n'
+            '• Rail uses corridor / hub routing before falling back to calibrated factors\n'
         )
         ttk.Label(frame, text=info, justify='left').pack(anchor='w', pady=(6, 10))
 
@@ -558,44 +729,35 @@ class App:
         self.process_btn.pack(side='left')
         ttk.Button(btns, text='Open Output Folder', command=self.open_output_folder).pack(side='left', padx=8)
 
-        ttk.Label(frame, textvariable=self.status, wraplength=720).pack(anchor='w', pady=(10, 0))
+        ttk.Label(frame, textvariable=self.status, foreground='#0a5').pack(anchor='w', pady=(6, 8))
+        self.progress = ttk.Progressbar(frame, mode='indeterminate')
+        self.progress.pack(fill='x')
 
-        sec = ttk.LabelFrame(frame, text='Data security statement', padding=12)
-        sec.pack(fill='both', expand=True, pady=(18, 0))
-        text = tk.Text(sec, height=9, wrap='word')
-        text.pack(fill='both', expand=True)
-        security_text = (
-            "This application is designed to protect sensitive client data by performing all spreadsheet processing locally on the user’s device. "
-            "Input files are not uploaded, stored, or transmitted to any external servers or databases.\n\n"
-            "To support distance estimation where required, the application may make limited external requests to third-party routing and geocoding services. "
-            "These requests include only non-sensitive geographic information (i.e., origin and destination locations) necessary to calculate transportation distances. "
-            "No client-specific data, emissions data, financial information, or full spreadsheet contents are transmitted externally.\n\n"
-            "When online routing or geocoding is unavailable, the application falls back to deterministic local estimation methods so that all non-Storage shipments still receive a distance estimate. "
-            "The application does not retain, log, or store any data beyond the local session. All outputs are generated and saved directly on the user’s device."
+        notes = (
+            'Suggested QA lanes after rebuild:\n'
+            '• Oakland, CA → Cancun, Mexico (Road)\n'
+            '• Rotterdam, Netherlands → New York City, NY (Sea)\n'
+            '• Myrtle Beach, SC → Miami, FL (Inland Water)\n'
+            '• Boston, MA → Ithaca, NY (Rail)\n'
         )
-        text.insert('1.0', security_text)
-        text.configure(state='disabled')
+        ttk.Label(frame, text=notes, justify='left').pack(anchor='w', pady=(12, 0))
 
-    def _file_row(self, parent, label, var, command):
+    def _file_row(self, parent, label, variable, command):
         row = ttk.Frame(parent)
         row.pack(fill='x', pady=4)
-        ttk.Label(row, text=label, width=16).pack(side='left')
-        ttk.Entry(row, textvariable=var).pack(side='left', fill='x', expand=True, padx=(0, 8))
+        ttk.Label(row, text=label, width=18).pack(side='left')
+        ttk.Entry(row, textvariable=variable).pack(side='left', fill='x', expand=True, padx=(0, 8))
         ttk.Button(row, text='Browse', command=command).pack(side='left')
 
     def pick_input(self):
-        path = filedialog.askopenfilename(filetypes=[('Excel workbooks', '*.xlsx')])
+        path = filedialog.askopenfilename(filetypes=[('Excel workbooks', '*.xlsx *.xlsm *.xltx *.xltm')])
         if path:
             self.input_path.set(path)
-            if not self.output_dir.get():
-                self.output_dir.set(str(Path(path).parent))
 
     def pick_template(self):
-        path = filedialog.askopenfilename(filetypes=[('Excel workbooks', '*.xlsx')])
+        path = filedialog.askopenfilename(filetypes=[('Excel workbooks', '*.xlsx *.xlsm *.xltx *.xltm')])
         if path:
             self.template_path.set(path)
-            if not self.output_dir.get():
-                self.output_dir.set(str(Path(path).parent))
 
     def pick_output_dir(self):
         path = filedialog.askdirectory()
@@ -604,64 +766,58 @@ class App:
 
     def open_output_folder(self):
         path = self.output_dir.get().strip()
-        if not path:
-            messagebox.showinfo(APP_TITLE, 'Choose an output folder first.')
-            return
-        try:
-            import os
-            import subprocess
-            import sys
-            if sys.platform.startswith('win'):
+        if path:
+            Path(path).mkdir(parents=True, exist_ok=True)
+            try:
+                import os
                 os.startfile(path)
-            elif sys.platform == 'darwin':
-                subprocess.Popen(['open', path])
-            else:
-                subprocess.Popen(['xdg-open', path])
-        except Exception as exc:
-            messagebox.showerror(APP_TITLE, f'Could not open folder.\n\n{exc}')
+            except Exception:
+                messagebox.showinfo(APP_TITLE, f'Output folder: {path}')
 
     def start_processing(self):
         if not self.input_path.get().strip() or not self.template_path.get().strip():
-            messagebox.showinfo(APP_TITLE, 'Please select both the input workbook and the template workbook.')
+            messagebox.showerror(APP_TITLE, 'Please select both the input workbook and the template workbook.')
             return
         self.process_btn.configure(state='disabled')
-        self.status.set('Processing... lane estimates are cached for speed.')
-        thread = threading.Thread(target=self._run_processing, daemon=True)
-        thread.start()
+        self.progress.start(8)
+        self.status.set('Processing...')
+        worker = threading.Thread(target=self._process_thread, daemon=True)
+        worker.start()
 
-    def _run_processing(self):
+    def _process_thread(self):
         try:
-            output_dir = Path(self.output_dir.get().strip() or Path(self.template_path.get()).parent)
-            output_dir.mkdir(parents=True, exist_ok=True)
+            out_dir = Path(self.output_dir.get().strip()) if self.output_dir.get().strip() else Path(self.template_path.get()).parent
+            out_dir.mkdir(parents=True, exist_ok=True)
             stamp = datetime.now().strftime('%Y-%m-%d')
-            output_path = output_dir / f'HLI Project GHG Calcs {stamp}.xlsx'
-            saved_path, row_count = process_workbooks(
+            out_path = out_dir / f'HLI Project GHG Calcs {stamp}.xlsx'
+            output_path, row_count = process_workbooks(
                 self.input_path.get().strip(),
                 self.template_path.get().strip(),
-                str(output_path),
+                str(out_path),
                 repair_formulas=self.repair_formulas.get(),
             )
-            self.root.after(0, lambda: self._finish_success(saved_path, row_count))
+            self.root.after(0, lambda: self._on_success(output_path, row_count))
         except Exception as exc:
-            self.root.after(0, lambda: self._finish_error(exc))
+            self.root.after(0, lambda: self._on_error(exc))
 
-    def _finish_success(self, saved_path, row_count):
+    def _on_success(self, output_path, row_count):
+        self.progress.stop()
         self.process_btn.configure(state='normal')
-        self.status.set(f'Success. Saved {row_count} populated rows to {saved_path}')
-        messagebox.showinfo(APP_TITLE, f'Success. Saved {row_count} populated rows.\n\n{saved_path}')
+        self.status.set(f'Success: processed {row_count} rows → {output_path}')
+        messagebox.showinfo(APP_TITLE, f'Successfully processed {row_count} rows.\n\nSaved to:\n{output_path}')
 
-    def _finish_error(self, exc):
+    def _on_error(self, exc):
+        self.progress.stop()
         self.process_btn.configure(state='normal')
-        self.status.set(f'Processing failed: {exc}')
-        messagebox.showerror(APP_TITLE, f'Processing failed.\n\n{exc}')
+        self.status.set('Processing failed.')
+        messagebox.showerror(APP_TITLE, f'Processing failed:\n\n{exc}')
 
 
 def main():
     root = tk.Tk()
-    try:
-        ttk.Style().theme_use('clam')
-    except Exception:
-        pass
+    style = ttk.Style()
+    if 'vista' in style.theme_names():
+        style.theme_use('vista')
     App(root)
     root.mainloop()
 
